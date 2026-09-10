@@ -1,0 +1,78 @@
+name: Implantação em produção
+
+on:
+  workflow_run:
+    workflows: ["CI - Build e testes"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      vars.PRODUCTION_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Baixar exatamente a versão aprovada
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Preparar conexão SSH com verificação do servidor
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Enviar artefato para uma nova versão
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PORT: ${{ vars.SERVER_PORT || '22' }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/projeto-aplicado/releases/$RELEASE_SHA"
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.env*' \
+            -e "ssh -p $SERVER_PORT" \
+            ./ "$SERVER_USER@$SERVER_HOST:/opt/projeto-aplicado/releases/$RELEASE_SHA/"
+
+      - name: Ativar versão e reiniciar serviço
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PORT: ${{ vars.SERVER_PORT || '22' }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" bash -s -- "$RELEASE_SHA" <<'REMOTE'
+          set -Eeuo pipefail
+          release_sha="$1"
+          release_dir="/opt/projeto-aplicado/releases/$release_sha"
+          python3 -m venv "$release_dir/.venv"
+          "$release_dir/.venv/bin/python" -m pip install --disable-pip-version-check --requirement "$release_dir/requirements.txt"
+          chgrp -R www-data "$release_dir"
+          chmod -R o-rwx "$release_dir"
+          ln -sfn "$release_dir" /opt/projeto-aplicado/current
+          sudo -n systemctl restart projeto-aplicado.service
+          sudo -n systemctl is-active --quiet projeto-aplicado.service
+          curl --fail --silent --show-error http://127.0.0.1:8000/healthz
+          find /opt/projeto-aplicado/releases -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+            | sort -nr | tail -n +6 | cut -d' ' -f2- | xargs --no-run-if-empty rm -rf --
+          REMOTE

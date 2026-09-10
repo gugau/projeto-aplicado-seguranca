@@ -1,0 +1,44 @@
+[Unit]
+Description=Projeto Aplicado - aplicação web segura
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=webapp
+Group=www-data
+WorkingDirectory=/opt/projeto-aplicado/current
+EnvironmentFile=/etc/projeto-aplicado.env
+ExecStart=/opt/projeto-aplicado/current/.venv/bin/gunicorn \
+  --workers 2 \
+  --bind 127.0.0.1:8000 \
+  --access-logfile - \
+  --error-logfile - \
+  --capture-output \
+  --timeout 30 \
+  wsgi:app
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+UMask=0027
+
+# Endurecimento do processo
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

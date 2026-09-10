@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Área interna · Projeto Aplicado{% endblock %}
+{% block content %}
+  <section class="dashboard" aria-labelledby="dashboard-title">
+    <div class="dashboard-header">
+      <div>
+        <span class="eyebrow">Área autenticada</span>
+        <h1 id="dashboard-title">Olá, {{ username }}.</h1>
+        <p>Seu acesso foi validado no servidor. Esta página não é exibida sem uma sessão autenticada.</p>
+      </div>
+      <form method="post" action="{{ url_for('auth.logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="secondary-button" type="submit">Sair da conta</button>
+      </form>
+    </div>
+
+    <div class="security-grid">
+      <article class="security-card">
+        <span class="card-number">01</span>
+        <h2>Controle de acesso</h2>
+        <p>A rota interna exige autenticação válida no servidor.</p>
+      </article>
+      <article class="security-card">
+        <span class="card-number">02</span>
+        <h2>Sessão protegida</h2>
+        <p>Cookies HttpOnly, SameSite e Secure reduzem a superfície de ataque.</p>
+      </article>
+      <article class="security-card">
+        <span class="card-number">03</span>
+        <h2>Defesa em profundidade</h2>
+        <p>CSRF, cabeçalhos HTTP e limitação de tentativas atuam em conjunto.</p>
+      </article>
+    </div>
+  </section>
+{% endblock %}

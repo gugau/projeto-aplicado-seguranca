@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Entrar · Projeto Aplicado{% endblock %}
+{% block content %}
+  <section class="auth-layout" aria-labelledby="login-title">
+    <div class="intro-panel">
+      <span class="eyebrow">Ambiente protegido</span>
+      <h1>Segurança começa antes do primeiro acesso.</h1>
+      <p>Este protótipo demonstra autenticação no servidor, proteção de sessão e controles inspirados no OWASP Top 10:2025.</p>
+      <ul class="feature-list">
+        <li>Sessão com expiração automática</li>
+        <li>Proteção contra requisições forjadas</li>
+        <li>Bloqueio de tentativas repetidas</li>
+      </ul>
+    </div>
+
+    <div class="card login-card">
+      <div class="card-heading">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>Conexão segura</span>
+      </div>
+      <h2 id="login-title">Acesse sua conta</h2>
+      <p class="muted">Use as credenciais fornecidas pelo administrador.</p>
+
+      {% if error %}
+        <div class="alert" role="alert">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('auth.login') }}" class="form-stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="username">Usuário</label>
+        <input id="username" name="username" type="text" maxlength="80" autocomplete="username" required autofocus>
+
+        <label for="password">Senha</label>
+        <input id="password" name="password" type="password" maxlength="256" autocomplete="current-password" required>
+
+        <button type="submit">Entrar com segurança</button>
+      </form>
+    </div>
+  </section>
+{% endblock %}
