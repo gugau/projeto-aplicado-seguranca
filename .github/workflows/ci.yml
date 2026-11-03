@@ -39,6 +39,12 @@ jobs:
       - name: Validar build da aplicação
         run: python -m compileall -q app tools wsgi.py
 
+      - name: Validar sintaxe dos scripts de infraestrutura
+        run: |
+          for script in deploy/*.sh deploy/certbot/*.sh deploy/oci/*.sh; do
+            bash -n "$script"
+          done
+
       - name: Executar testes
         run: python -m pytest -q
 

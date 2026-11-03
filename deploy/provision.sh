@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+trap 'status=$?; printf "Falha no provisionamento: linha %s, status %s.\n" "$LINENO" "$status" >&2; exit "$status"' ERR
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Execute com sudo: sudo bash deploy/provision.sh <IP-ou-dominio> <email>" >&2
@@ -25,8 +26,12 @@ if [[ ! "$public_address" =~ ^[A-Za-z0-9.-]+$ ]]; then
   exit 1
 fi
 
-if [[ ! "$email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
-  echo "Informe um e-mail válido para a conta da Let's Encrypt." >&2
+if [[ "$email" == '-' ]]; then
+  certificate_contact=(--register-unsafely-without-email --no-eff-email)
+elif [[ "$email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
+  certificate_contact=(--email "$email" --no-eff-email)
+else
+  echo "Informe um e-mail válido ou '-' para registro sem e-mail." >&2
   exit 1
 fi
 
@@ -58,6 +63,29 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
   nginx python3 python3-venv python3-pip python3-systemd rsync fail2ban ufw openssl ca-certificates curl
+
+# Conferir os controles exigidos antes de alterar o alcance de rede.
+install -o root -g root -m 0644 "$repo_root/deploy/fail2ban/sshd.local" /etc/fail2ban/jail.d/sshd.local
+install -o root -g root -m 0644 "$repo_root/deploy/ssh/00-projeto-aplicado.conf" /etc/ssh/sshd_config.d/00-projeto-aplicado.conf
+sshd -t
+effective_ssh="$(sshd -T | tr '[:upper:]' '[:lower:]')"
+grep -qx 'passwordauthentication no' <<< "$effective_ssh"
+grep -qx 'kbdinteractiveauthentication no' <<< "$effective_ssh"
+grep -qx 'permitrootlogin no' <<< "$effective_ssh"
+systemctl reload ssh
+systemctl enable --now fail2ban.service
+fail2ban-client reload
+[[ "$(fail2ban-client get sshd maxretry)" == 4 ]]
+[[ "$(fail2ban-client get sshd bantime)" == 86400 ]]
+
+# HTTP-01 precisa estar acessível antes da emissão, não apenas após o certificado.
+# A chave administrativa já foi verificada antes desta alteração pelo operador.
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow from "$ssh_cidr" to any port 22 proto tcp comment 'SSH por chave com Fail2Ban'
+ufw allow 80/tcp comment 'HTTP para redirect e ACME'
+ufw allow 443/tcp comment 'HTTPS da aplicacao'
+ufw --force enable
 
 if ! openssl list -tls1_3 -tls-groups 2>/dev/null | grep 'X25519MLKEM768' >/dev/null; then
   echo "O OpenSSL disponível não oferece X25519MLKEM768. Use a versão estável mais recente do Ubuntu/Debian com OpenSSL 3.5+ antes de prosseguir." >&2
@@ -132,6 +160,20 @@ rm -f /etc/nginx/sites-enabled/default
 install -d -o www-data -g www-data -m 0755 /var/www/certbot/.well-known/acme-challenge
 nginx -t
 systemctl enable --now nginx
+systemctl reload nginx
+
+# Confirmar a configuração carregada antes de consumir uma tentativa ACME.
+probe_path="$(mktemp /var/www/certbot/.well-known/acme-challenge/preflight.XXXXXX)"
+printf 'preflight-ok\n' > "$probe_path"
+chmod 0644 "$probe_path"
+if ! curl --fail --silent --show-error --max-time 10 --retry 5 --retry-all-errors --retry-delay 1 \
+  --header "Host: $public_address" \
+  "http://127.0.0.1/.well-known/acme-challenge/$(basename "$probe_path")" | grep -qx 'preflight-ok'; then
+  rm -f -- "$probe_path"
+  echo 'Webroot HTTP-01 não responde; emissão cancelada antes de contatar a CA.' >&2
+  exit 1
+fi
+rm -f -- "$probe_path"
 
 python3 -m venv /opt/certbot
 /opt/certbot/bin/python -m pip install --disable-pip-version-check 'certbot==5.8.0'
@@ -139,16 +181,18 @@ ln -sfn /opt/certbot/bin/certbot /usr/local/bin/certbot
 
 if [[ "$public_address" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
   certbot certonly \
-    --non-interactive --agree-tos --no-eff-email --email "$email" \
+    --non-interactive --agree-tos "${certificate_contact[@]}" \
     --required-profile shortlived \
     --webroot --webroot-path /var/www/certbot \
     --ip-address "$public_address" \
+    --cert-name "$public_address" \
     --key-type ecdsa
 else
   certbot certonly \
-    --non-interactive --agree-tos --no-eff-email --email "$email" \
+    --non-interactive --agree-tos "${certificate_contact[@]}" \
     --webroot --webroot-path /var/www/certbot \
     --domain "$public_address" \
+    --cert-name "$public_address" \
     --key-type ecdsa
 fi
 
@@ -158,15 +202,6 @@ install -o root -g root -m 0755 "$repo_root/deploy/certbot/reload-nginx.sh" /etc
 install -o root -g root -m 0644 "$repo_root/deploy/certbot/certbot-renew.service" /etc/systemd/system/certbot-renew.service
 install -o root -g root -m 0644 "$repo_root/deploy/certbot/certbot-renew.timer" /etc/systemd/system/certbot-renew.timer
 
-install -o root -g root -m 0644 "$repo_root/deploy/fail2ban/sshd.local" /etc/fail2ban/jail.d/sshd.local
-# O OpenSSH usa o primeiro valor encontrado: este arquivo precede 50-cloud-init.conf.
-install -o root -g root -m 0644 "$repo_root/deploy/ssh/00-projeto-aplicado.conf" /etc/ssh/sshd_config.d/00-projeto-aplicado.conf
-sshd -t
-effective_ssh="$(sshd -T)"
-grep -qx 'passwordauthentication no' <<< "$effective_ssh"
-grep -qx 'kbdinteractiveauthentication no' <<< "$effective_ssh"
-grep -qx 'permitrootlogin no' <<< "$effective_ssh"
-
 sudoers_file="/etc/sudoers.d/projeto-aplicado-deploy"
 {
   printf '%s ALL=(root) NOPASSWD: /usr/bin/systemctl restart projeto-aplicado.service\n' "$deploy_user"
@@ -174,13 +209,6 @@ sudoers_file="/etc/sudoers.d/projeto-aplicado-deploy"
 } > "$sudoers_file"
 chmod 0440 "$sudoers_file"
 visudo -cf "$sudoers_file"
-
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow from "$ssh_cidr" to any port 22 proto tcp comment 'SSH por chave com Fail2Ban'
-ufw allow 80/tcp comment 'HTTP para redirect e ACME'
-ufw allow 443/tcp comment 'HTTPS da aplicacao'
-ufw --force enable
 
 nginx -t
 systemctl daemon-reload
