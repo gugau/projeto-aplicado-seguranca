@@ -27,7 +27,7 @@ def main():
         "regions": [{"region": r.region_name, "home": r.is_home_region} for r in regions],
         "active_instances": [{"name": i.display_name, "shape": i.shape} for i in active if i.lifecycle_state != "TERMINATED"],
         "images": [{"name": i.display_name, "version": i.operating_system_version, "id": i.id} for i in images],
-        "planning_only": {"shape": "VM.Standard.A1.Flex", "ocpus": 1, "memory_gb": 6, "boot_gb": 47, "load_balancer": False, "capacity_verified": False, "zero_cost_guaranteed": False},
+        "planning_only": {"shape": "VM.Standard.A1.Flex", "ocpus": 1, "memory_gb": 6, "boot_gb": 50, "load_balancer": False, "capacity_verified": False, "zero_cost_guaranteed": False},
     }
     print(json.dumps(report, indent=2, ensure_ascii=True))
 
