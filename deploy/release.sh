@@ -58,7 +58,7 @@ python3 -m venv "$release_dir/.venv"
 chgrp -R "${APP_GROUP:-www-data}" "$release_dir"
 # mktemp cria o diretório com 0700; o serviço webapp precisa atravessá-lo.
 # Dar leitura/execução ao grupo sem permitir escrita ou acesso a terceiros.
-chmod -R g+rX,o-rwx "$release_dir"
+chmod -R g+rX,g-w,o-rwx "$release_dir"
 # Marcado antes da troca: qualquer falha na ativação também aciona recuperação.
 activated=true
 activate "$release_dir"
