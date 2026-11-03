@@ -23,38 +23,38 @@ O teste de reprodução usou somente credenciais sintéticas dos testes. Nenhuma
 3. Testes: regressões de autenticação, cookies, entradas, duas instâncias de aplicação e cenários Linux do script de deploy.
 4. Documentação: situação real, roteiro OCI, diferenças do escopo, matriz e evidências a coletar.
 
-## Matriz após as correções locais
+## Matriz após as correções e validações de produção
 
-Legenda: **VL** = validado localmente; **AV** = arquivo implementado, validação no servidor pendente; **P** = parcial; **A** = ausente em produção. As categorias podem coexistir porque código local e infraestrutura têm evidências distintas.
+Legenda: **VL** = validado localmente; **VP** = validado na VM/externamente; **AV** = arquivo implementado, validação no servidor pendente; **P** = parcial; **A** = ausente em produção. As categorias podem coexistir. Resultados reais em [EVIDENCIAS-ENTREGA.md](EVIDENCIAS-ENTREGA.md).
 
 | Requisito | Situação atual | Evidência | Ajuste/etapa necessária | Como validar |
 |---|---|---|---|---|
-| OCI Free Tier | P; conta acessível, sem VM ativa | Consulta autenticada à OCI após limpeza; `deploy/oci/preflight.py` | Confirmar limites, uso acumulado e capacidade antes de provisionar | Console Always Free + API, configuração e análise de custos |
-| Ubuntu/Debian estável mais recente | A | Catálogo OCI ARM retornou Ubuntu até 26.04 | Usar versão atual, não apenas LTS antiga; ver roteiro | `/etc/os-release`, `uname -r`, fonte oficial da distribuição |
-| Nginx/Apache | AV | `deploy/nginx/`, `deploy/provision.sh` | Instalar e testar configuração efetiva | `nginx -v`, `nginx -V`, `nginx -t`, `nginx -T` |
-| Acesso por IP público | A | Nenhum IP de produção foi criado | Criar VM/rede mínima e publicar | Acesso externo HTTPS por IP e captura |
-| SSH por chave, sem senha | AV | `deploy/ssh/00-projeto-aplicado.conf`; `sshd -T` no script | Validar chave em segunda sessão antes de endurecer; manter console de recuperação | `sshd -t`, `sshd -T`, login por chave e rejeição de senha |
-| Fail2Ban quatro erros/24 h | AV | `deploy/fail2ban/sshd.local`; backend systemd e `python3-systemd` | Conferir jail ativo | `fail2ban-client get sshd maxretry`, `get sshd bantime`, teste controlado por origem recuperável |
-| Exposição mínima | AV/P | UFW parametrizado, proxy loopback; origem SSH depende da pipeline | Alinhar NSG/UFW com origem de administração/Actions | `ufw status numbered`, regras OCI, `ss -ltnp` e sondagem externa |
-| Certbot ≥5.4, Let's Encrypt | AV | `deploy/provision.sh` fixa 5.8 e usa perfil obrigatório para IP | Emitir certificado real | `certbot --version`, `certbot certificates`, validar cadeia/SAN IP |
-| Redirecionamento HTTP → HTTPS | AV | `deploy/nginx/projeto-aplicado.conf` | Aplicar na VM | HTTP 301 para HTTPS; exceção ACME continua acessível |
-| Renovação automática/reload | AV | `deploy/certbot/` timer/hook | Testar emissão e renovação | Timer ativo; `certbot renew --dry-run --run-deploy-hooks`; datas do certificado |
-| TLS confiável por IP | A | Verificador local preparado, nenhum certificado emitido | Publicar e submeter endereço real | SSL.org: confiança YES e assinatura/chave aceitáveis |
-| PQC por IP | AV/A | Grupo híbrido configurado e handshake local adicionado a `verify-security.sh` | Comprovar biblioteca usada pelo Nginx e handshake real | `nginx -V`, OpenSSL 3.5+; s_client híbrido e DigiCert |
+| OCI Free Tier | VP para configuração; contabilização final temporária pendente | Uma A1 1 OCPU/6 GB/50 GB na home region | Acompanhar fatura; importação temporária autorizada até US$ 0,10 já removida | API OCI e registro de custos/limites |
+| Ubuntu/Debian estável mais recente | VP | Ubuntu 26.10 stable, kernel 7.3; SSH efetivo | Manter atualizações | `/etc/os-release` e fonte oficial |
+| Nginx/Apache | VP | Nginx 1.30.4; configuração testada e aplicação pública | Manutenção | `nginx -v/-V/-t/-T`, HTTPS externo |
+| Acesso por IP público | VP | `https://163.176.111.141` e teste funcional externo | Preservar IP ou atualizar configuração se reconstruir VNIC | Acesso HTTPS real |
+| SSH por chave, sem senha | VP | Novas sessões admin/deployer; `sshd -T` confirma senha/interativo/root no | Preservar console e chaves seguras | Login por chave e configuração efetiva |
+| Fail2Ban quatro erros/24 h | VP | Jail ativo; get maxretry=4 e bantime=86400 | Monitorar bans; teste destrutivo de ban não feito para evitar bloquear administrador | Consultas efetivas do Fail2Ban |
+| Exposição mínima | VP | NSG/UFW 22/80/443; SSH público expressamente autorizado; 8000 loopback | Manter compatibilidade com runner e revisar alcance conforme arquitetura | UFW, OCI e escutas reais |
+| Certbot ≥5.4, Let's Encrypt | VP | Certbot 5.8, certificado emitido com SAN IP | Manter renovação | Certificado externo confiável |
+| Redirecionamento HTTP → HTTPS | VP | HTTP 301 observado externamente | Manutenção | Teste externo |
+| Renovação automática/reload | VP para timer e ensaio de renovação | Timer ativo e renew --dry-run aprovado; hook instalado | Observar futura renovação real em operação | Timer, dry-run e logs futuros |
+| TLS confiável por IP | VP | SSL.org Yes/Good signature/Good key; cliente externo verifica cadeia/IP | Guardar captura real; diferença de rótulo registrada | Evidências da entrega |
+| PQC por IP | VP | Handshakes interno/externo negociam X25519MLKEM768; DigiCert PASS informado pelo aluno | Guardar captura real do teste do aluno | OpenSSL e DigiCert |
 | TLS/PQC por domínio, se escolhido | Não se aplica ao plano por IP | Nginx suporta domínio, mas não foi escolhido domínio | Só aplicar se trocar o endereço de entrega | SSL Labs A com indicação de PQC; não substituir por teste de IP |
 | GitHub público | Validado pela API pública em 03/11/2026 | Repositório `gugau/projeto-aplicado-seguranca`: `private=false`, branch padrão `dev` | Publicar esta revisão após validação | Página pública e commit correspondente |
-| Proteção de branches (prática adicional solicitada) | P; dev/hmg/main estão sem proteção na API atual | API `/branches`: `protected=false` para as três branches | Configurar PR/check obrigatório após autenticar a conta pessoal | API e ensaio de promoção sem push direto |
+| Proteção de branches (prática adicional solicitada) | Validada | Proteção aplicada em dev/hmg/main e PRs #6/#7/#8 promovidos com CI | Manter controles | API e histórico de PRs |
 | Conta pessoal separada | Implementado; configuração histórica | Alias SSH pessoal e identidade local definidos nesta tarefa | Conferir identidade antes de push; sem alterar Git global | `git config --local user.name`, remote e autenticação pessoal |
 | Prevenção de credenciais | VL, heurística | `.gitignore`, `tools/check_secrets.py --history` | Repetir no CI; revisar também alterações novas | Verificação atual e de blobs históricos, sem imprimir valores |
-| Login e página protegida | VL | `app/auth.py`, `app/security.py`, testes de autenticação | Repetir externamente na VM | Acesso direto sem cookie recebe 302; credenciais corretas abrem dashboard |
-| Logout e cookie reapresentado | VL; falha inicial corrigida | `app/sessions.py`; regressão entre duas aplicações | Confirmar diretório compartilhado com dois workers reais | Capturar cookie sintético, sair e reutilizar: 302 |
+| Login e página protegida | VL/VP | Testes locais e 11 verificações externas | Manter regressões | Sem cookie: 302; credenciais corretas: dashboard 200 |
+| Logout e cookie reapresentado | VL/VP; falha inicial corrigida | Tickets revogáveis; cookie real capturado e rejeitado após logout | Manter regressão | Reutilização após logout recebe 302 |
 | Expiração e rotação | VL | Expiração absoluta no ticket; `SESSION_REFRESH_EACH_REQUEST=False` | Confirmar tempo configurado em produção | Testes de relógio e uso contínuo; ausência de renovação automática |
-| Cookies, CSRF, entradas e erros | VL | `tests/test_auth.py`, `tests/test_security.py` | Conferir proxy/HTTPS real | Cookies Secure/HttpOnly/Strict; CSRF ausente, inválido e Unicode rejeitados |
-| ≥3 categorias OWASP 2025 | VL para aplicação; AV para borda | A01, A02, A05 e A07, mapeadas no README | Não confundir mitigação com garantia total contra uma categoria | Regressões de acesso, configuração, escape e autenticação |
+| Cookies, CSRF, entradas e erros | VL; cookies/cabeçalhos VP | Testes e cliente HTTPS real | Manter regressões | Cookies Secure/HttpOnly/Strict; CSRF inválido/Unicode rejeitado localmente |
+| ≥3 categorias OWASP 2025 | VL/VP para controles examinados | A01, A02, A05 e A07, mapeadas no README; borda e acesso externos verificados | Não confundir mitigação com garantia total contra uma categoria | Regressões de acesso, configuração, escape e autenticação |
 | IA no desenvolvimento/auditoria | Evidência nesta tarefa e arquivos | Histórico desta tarefa; README | Aluno demonstrar ferramentas e justificar decisões | Demonstração da revisão e das reproduções/correções |
-| GitHub Actions após push main | P | Workflow preserva CI aprovado, SHA exato e Secrets; gate desabilitado | Cadastrar Secrets, habilitar variável do repositório e executar push main | Run real verde com SHA correspondente e aplicação atualizada |
-| DEV/HMG sem publicação | AV | `ci.yml` e condição de branch em `deploy.yml` | Validar novos workflows no GitHub | Runs em dev/hmg só build/testes; nenhum acesso aos Secrets de produção |
-| Identidade SSH, usuário mínimo | AV | StrictHostKeyChecking e deployer dedicado; duas permissões sudo | Confirmar chave de host por console confiável e sudo efetivo | Fingerprint validada e `sudo -l -U deployer` |
+| GitHub Actions após push main | P | CI main aprovado; Secrets production cadastrados com autorização; gate ainda desabilitado | Habilitar variável e concluir nova promoção main | Run real verde com SHA correspondente e aplicação atualizada |
+| DEV/HMG sem publicação | Validado no GitHub | CI das promoções #6/#7; condição do deploy exige push main | Preservar condição nas novas promoções | Runs em dev/hmg só build/testes; nenhum acesso aos Secrets de produção |
+| Identidade SSH, usuário mínimo | VP | Fingerprint validada pelo console OCI; nova conexão deployer e sudo -l com duas operações | Proteger chave dedicada e Secrets | Teste real de acesso/privilégios |
 | Recuperação do deploy | VL com serviços simulados; AV para OCI | `deploy/release.sh`, `tests/test_release.py` | Executar novo CI e ensaio real com falha controlada | Link anterior restaurado e pipeline continua vermelha |
 | README e evidências finais | P | README revisto; este relatório e roteiro OCI | Acrescentar resultados de nuvem realmente coletados | Checklist de demonstração abaixo |
 
@@ -70,7 +70,7 @@ Legenda: **VL** = validado localmente; **AV** = arquivo implementado, validaçã
 - Varredura heurística de credenciais em arquivos do projeto e blobs do histórico local: nenhum padrão detectado. Isso não prova ausência de todo tipo de segredo.
 - Auditoria atual: o conjunto instalado apresentou alertas para Werkzeug 3.1.8 (PYSEC-2026-4312) e pytest 8.4.2 (PYSEC-2026-1845; repetido na resposta da ferramenta). Foram fixados Werkzeug 3.1.9 e pytest 9.0.3. A reauditoria dos pacotes diretos e transitivos enumerados do ambiente Windows retornou **nenhuma vulnerabilidade conhecida**; a resolução automática inicial foi interrompida por execução prolongada e substituída por enumeração explícita, sem omitir as dependências instaladas de aplicação/testes. O novo CI também audita `requirements-dev.txt` com resolução de dependências. Referências dos mantenedores: [Werkzeug](https://werkzeug.palletsprojects.com/en/stable/changes/), [pytest](https://docs.pytest.org/en/9.0.x/changelog.html).
 - `pip check`: sem conflitos nos ambientes Windows e Linux após as atualizações.
-- OCI: consulta autenticada confirmou ausência de máquinas ativas e catálogo Ubuntu ARM até 26.04. Não foram criados recursos durante esta revisão.
+- OCI: o levantamento inicial encontrou ausência de máquinas ativas; depois foi criada a VM mínima. Ubuntu 26.04 foi substituído por 26.10 quando o upgrade oficial não ofereceu a versão. Imagens/buckets temporários foram removidos após confirmar boot e acesso SSH.
 
 ## Diferenças e referências atuais
 
@@ -78,7 +78,7 @@ Legenda: **VL** = validado localmente; **AV** = arquivo implementado, validaçã
 - O escopo exige última versão estável, não apenas a última LTS disponível no catálogo. Em 03/11/2026, as fontes oficiais indicam [Ubuntu 26.10](https://documentation.ubuntu.com/release-notes/26.10/) e [Debian 13.7](https://www.debian.org/releases/). O catálogo OCI consultado não retornou Ubuntu 26.10 para A1.
 - Para **IP**, o escopo exige SSL.org e DigiCert. Para **domínio**, exige SSL Labs A com PQC; não exige duplicar o teste de IP. O checklist antigo que sugeria DigiCert em todos os casos foi corrigido no roteiro.
 - Assinatura do certificado e troca de chaves TLS são mecanismos diferentes. Certificado ECDSA pode coexistir com troca híbrida ML-KEM; só o teste real confirma negociação.
-- A documentação Oracle apresenta diferenças entre limites A1 por tipo de conta e páginas; o plano conservador é 1 OCPU, 6 GB de memória e 47 GB de disco. Isso é planejamento, não garantia de capacidade ou custo zero. [Always Free](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
+- A configuração aplicada é 1 OCPU, 6 GB e 50 GB de disco, na home region. A imagem importada foi armazenamento temporário cobrável, autorizado até US$ 0,10 e removido. Não há promessa de custo total zero. [Always Free](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
 
 ## Limitações conhecidas
 
