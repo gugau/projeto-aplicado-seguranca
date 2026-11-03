@@ -281,6 +281,8 @@ sudo systemctl restart projeto-aplicado
 
 ## Evidências para a apresentação
 
+Para a entrega em vídeo, siga o [roteiro em português com falas, abas e tempos](docs/ROTEIRO-GRAVACAO.md) e a [cola de gravação](docs/COLA-GRAVACAO.md). A apresentação foi planejada para cerca de oito minutos, dentro dos cinco a dez minutos indicados pelo professor. Uma única página interna é suficiente; o painel mostra dados do acesso, sem métricas de monitoramento simuladas. `deploy/presentation.sh` prepara consultas de infraestrutura, TLS e versão ativa sem ler credenciais.
+
 Salve capturas sem expor chaves, hashes completos ou outros segredos:
 
 - aplicação acessível pelo IP/domínio em HTTPS;

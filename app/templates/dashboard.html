@@ -4,32 +4,46 @@
   <section class="dashboard" aria-labelledby="dashboard-title">
     <div class="dashboard-header">
       <div>
-        <span class="eyebrow">Área autenticada</span>
+        <span class="eyebrow">Área interna</span>
         <h1 id="dashboard-title">Olá, {{ username }}.</h1>
-        <p>Seu acesso foi validado no servidor. Esta página não é exibida sem uma sessão autenticada.</p>
+        <p>Bem-vindo ao seu espaço de acesso restrito.</p>
       </div>
       <form method="post" action="{{ url_for('auth.logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="secondary-button" type="submit">Sair da conta</button>
+        <button class="secondary-button" type="submit">Sair da conta <span aria-hidden="true">↗</span></button>
       </form>
     </div>
 
-    <div class="security-grid">
-      <article class="security-card">
-        <span class="card-number">01</span>
-        <h2>Controle de acesso</h2>
-        <p>A rota interna exige autenticação válida no servidor.</p>
+    <div class="account-summary" aria-label="Resumo do seu acesso">
+      <article class="account-item">
+        <span class="summary-label">Conta conectada</span>
+        <strong>{{ username }}</strong>
+        <p>Usuário autenticado neste acesso.</p>
       </article>
-      <article class="security-card">
-        <span class="card-number">02</span>
-        <h2>Sessão protegida</h2>
-        <p>Cookies HttpOnly, SameSite e Secure reduzem a superfície de ataque.</p>
+      <article class="account-item">
+        <span class="summary-label">Duração máxima da sessão</span>
+        <strong>{{ session_minutes }} <span class="summary-unit">min</span></strong>
+        <p>Contados a partir do login.</p>
       </article>
-      <article class="security-card">
-        <span class="card-number">03</span>
-        <h2>Defesa em profundidade</h2>
-        <p>CSRF, cabeçalhos HTTP e limitação de tentativas atuam em conjunto.</p>
+      <article class="account-item">
+        <span class="summary-label">Conexão atual</span>
+        <strong>{{ 'HTTPS' if request.is_secure else 'HTTP' }}</strong>
+        <p>{{ 'Tráfego criptografado nesta conexão.' if request.is_secure else 'Conexão sem criptografia TLS.' }}</p>
       </article>
     </div>
+
+    <section class="access-panel" aria-labelledby="access-title">
+      <div class="access-symbol" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none"><path d="M16 3 5 7v8c0 7 11 14 11 14s11-7 11-14V7L16 3Z" stroke="currentColor" stroke-width="1.8"/><path d="m11 15 3.5 3.5L21 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <span class="eyebrow">Acesso autenticado</span>
+        <h2 id="access-title">Sua sessão está ativa.</h2>
+        <p>Esta página está disponível somente após o login. Ao terminar, use <strong>Sair da conta</strong> para encerrar o acesso.</p>
+      </div>
+      <span class="access-badge">Área restrita</span>
+    </section>
+
+    <p class="session-note">A navegação não estende o prazo da sessão. Após a expiração, entre novamente para continuar.</p>
   </section>
 {% endblock %}

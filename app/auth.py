@@ -87,7 +87,11 @@ def login():
 @auth_blueprint.get("/dashboard")
 @login_required
 def dashboard():
-    return render_template("dashboard.html", username=session["username"])
+    return render_template(
+        "dashboard.html",
+        username=session["username"],
+        session_minutes=int(current_app.permanent_session_lifetime.total_seconds() // 60),
+    )
 
 
 @auth_blueprint.post("/logout")
