@@ -2,7 +2,7 @@
 
 Protótipo web com autenticação real no servidor, área interna protegida e logout. A entrega foi estruturada para demonstrar **Secure by Design**, **Secure by Default**, três ou mais categorias do **OWASP Top 10:2025**, infraestrutura Linux endurecida e implantação contínua pelo GitHub Actions.
 
-> **Estado da entrega:** código, testes, Nginx, serviço, segurança do servidor e CI/CD estão preparados. A publicação definitiva depende da criação da VM e do cadastro das credenciais do próprio aluno no provedor de nuvem e no GitHub.
+> **Estado em 03/11/2026:** revisão e correções locais realizadas; a infraestrutura anterior na OCI foi removida e não há VM de produção. Os arquivos de Nginx, SSH, firewall, TLS e CI/CD são implementações ainda pendentes de validação no servidor. A entrega acadêmica não está concluída. Consulte a [matriz de conformidade e evidências](docs/REVISAO-TECNICA.md) e o [roteiro OCI](deploy/oci/README.md).
 
 ## Visão geral
 
@@ -24,6 +24,8 @@ flowchart LR
 | Automação | GitHub Actions | Testes e deploy da versão aprovada |
 
 Não existe banco de dados. O nome do usuário e o **hash** da senha são lidos de `/etc/projeto-aplicado.env`, fora do código e fora do Git.
+
+As sessões usam cookie assinado e um ticket revogável em arquivos locais, compartilhados pelos workers. Em produção os tickets ficam em `/run/projeto-aplicado/sessions`, com acesso exclusivo ao usuário do serviço. Logout remove o ticket: copiar um cookie anterior não restaura o acesso. A expiração é absoluta; requisições não prorrogam os 30 minutos. Reiniciar o serviço invalida as sessões, pois o diretório é volátil. Não há serviço adicional nem armazenamento de senha nos tickets.
 
 ## Desenvolvimento assistido por inteligência artificial
 
@@ -80,7 +82,7 @@ PowerShell:
 
 ```powershell
 $env:APP_ENV = "development"
-$env:SECRET_KEY = -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
+$env:SECRET_KEY = python -c "import secrets; print(secrets.token_hex(32))"
 $env:APP_USERNAME = "admin"
 $env:APP_PASSWORD_HASH = "cole-o-hash-aqui"
 ```
@@ -99,7 +101,7 @@ Acesse `http://127.0.0.1:5000`. Em desenvolvimento, o cookie seguro fica desativ
 python -m pytest -q
 ```
 
-Os testes verificam autenticação, autorização da página interna, logout, CSRF, bloqueio por tentativas, limite do corpo da requisição, cabeçalhos HTTP e HSTS.
+Os testes verificam autenticação, autorização, revogação de cookie capturado após logout, compartilhamento entre instâncias da aplicação, expiração absoluta, rotação de cookie/CSRF, entradas inválidas, bloqueio por tentativas, escape HTML, limite do corpo, cabeçalhos e flags de cookie. `tests/test_release.py` exige Linux e testa ativação e recuperação usando serviços simulados; no Windows é explicitamente ignorado. Isso não substitui testar o deploy na OCI.
 
 ## OWASP Top 10:2025 — controles implementados
 
@@ -133,7 +135,7 @@ A relação abaixo usa os nomes da [lista oficial OWASP Top 10:2025](https://owa
 
 **Risco:** força bruta, armazenamento inseguro da senha e sessão previsível ou duradoura.
 
-**Mitigação:** apenas o hash `scrypt` é armazenado. Há mensagem genérica para usuário ou senha incorretos, limitação de cinco falhas em quinze minutos por combinação de IP/usuário, limitação adicional no Nginx, rotação do token de sessão após login, encerramento por logout e expiração padrão em trinta minutos.
+**Mitigação:** apenas o hash `scrypt` é configurado; um valor em texto puro impede a inicialização. Há mensagem genérica, limitação de cinco falhas em quinze minutos por combinação de IP/usuário e limitação adicional no Nginx. O login renova cookie e CSRF e cria um ticket em `app/sessions.py`; logout revoga o ticket. A expiração absoluta padrão é de trinta minutos.
 
 **Comprovação:** `tools/generate_password_hash.py`, `app/security.py` e `tests/test_auth.py::test_login_is_rate_limited_after_five_failures`.
 
@@ -151,15 +153,19 @@ A relação abaixo usa os nomes da [lista oficial OWASP Top 10:2025](https://owa
 
 ## Preparação da nuvem
 
-Crie uma VM no *Free Tier* do provedor escolhido com a versão estável mais recente de **Ubuntu Server ou Debian** e associe um IP público estático. No Security Group do provedor:
+O provedor escolhido é a **Oracle Cloud Infrastructure**, com uma única VM de produção e sem load balancer. DEV e HMG são branches com build/testes, sem VMs. A consulta real de 03/11/2026 encontrou imagens Ubuntu ARM até 26.04 no catálogo; a versão estável Ubuntu mais recente é 26.10. Não consideramos uma imagem antiga conforme apenas por ser LTS. A seleção/atualização do sistema e a elegibilidade Free Tier são etapas pendentes detalhadas no [roteiro OCI](deploy/oci/README.md).
+
+Regras a conferir na NSG/Security List e no UFW:
 
 | Porta | Origem recomendada | Finalidade |
 |---|---|---|
-| 22/TCP | somente o IP administrativo do aluno | SSH por chave |
+| 22/TCP | CIDR definido para administração e pipeline | SSH por chave e Fail2Ban |
 | 80/TCP | internet | desafio ACME e redirecionamento |
 | 443/TCP | internet | aplicação HTTPS |
 
 Não autorize portas como 5000 ou 8000. O Gunicorn não deve ficar acessível pela internet.
+
+**Compatibilidade com Actions:** restringir 22 apenas ao IP do aluno bloqueia os runners hospedados. Seus IPs são dinâmicos ([GitHub](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-githubs-ip-addresses)). O roteiro explicita a decisão de origem; não há abertura automática de firewall pela pipeline nem runner auto-hospedado. Não declare a integração validada antes de testar um runner real.
 
 Antes do provisionamento:
 
@@ -171,14 +177,14 @@ Antes do provisionamento:
 Execute a partir da raiz do repositório clonado:
 
 ```bash
-sudo bash deploy/provision.sh IP_PUBLICO SEU_EMAIL
+sudo bash deploy/provision.sh IP_PUBLICO SEU_EMAIL /caminho/deploy.pub CIDR_SSH
 ```
 
 O script:
 
 - verifica a existência de uma chave SSH antes de desabilitar senhas;
 - instala Nginx, Python, Fail2Ban, UFW e Certbot 5.8;
-- cria usuário de serviço sem login;
+- cria usuário de serviço sem login e usuário `deployer` dedicado, com chave própria e sem sudo geral;
 - solicita usuário e senha inicial da aplicação;
 - cria o arquivo de segredos com permissão restrita;
 - configura Gunicorn/systemd e Nginx;
@@ -186,14 +192,14 @@ O script:
 - emite o certificado, ativa renovação e recarregamento automático;
 - limita o firewall às três portas documentadas;
 - configura o Fail2Ban para quatro erros e banimento por 24 horas;
-- desabilita senha e login de root no SSH;
+- instala o arquivo SSH `00-projeto-aplicado.conf` antes do cloud-init e confere o resultado efetivo com `sshd -T`;
 - executa verificações locais ao final.
 
 **Cuidado:** mantenha a sessão SSH atual aberta. Antes de fechá-la, abra uma segunda sessão e confirme que o acesso por chave continua funcionando.
 
 ## HTTPS por IP e renovação
 
-Para IPs, o projeto usa Certbot 5.8 em modo `webroot`, `--ip-address` e o perfil `shortlived`. Certificados de IP da Let’s Encrypt duram aproximadamente seis dias; por isso o timer verifica a renovação duas vezes por dia e o *deploy hook* valida e recarrega o Nginx.
+Para IPs, o script fixa Certbot 5.8 em modo `webroot`, `--ip-address` e `--required-profile shortlived`, sem fallback silencioso de perfil ([Certbot](https://eff-certbot.readthedocs.io/en/stable/man/certbot.html)). O timer verifica a renovação duas vezes por dia e o hook valida/recarrega o Nginx. Emissão, prazo real, renovação e compatibilidade com o sistema selecionado ainda precisam ser medidos na VM.
 
 O Certbot armazena o certificado em:
 
@@ -209,7 +215,7 @@ sudo certbot renew --dry-run
 systemctl list-timers certbot-renew.timer
 ```
 
-Se for utilizado um domínio, o mesmo script detecta o nome e solicita um certificado ECDSA convencional.
+Se for utilizado um domínio, o mesmo script detecta o nome e solicita um certificado ECDSA. A assinatura ECDSA do certificado é distinta da troca de chaves híbrida TLS `X25519MLKEM768`. Nem a presença da diretiva PQC nem um handshake local substituem os verificadores externos exigidos no escopo.
 
 ## CI/CD com GitHub Actions
 
@@ -224,7 +230,7 @@ O repositório usa três branches permanentes e promoção por Pull Request:
 O fluxo possui duas etapas:
 
 1. `.github/workflows/ci.yml` instala as versões fixadas, valida o build e executa os testes em cada `push` ou Pull Request para `dev`, `hmg` e `main`.
-2. `.github/workflows/deploy.yml` roda somente após um CI aprovado originado por `push` na `main` do próprio repositório e quando `PRODUCTION_DEPLOY_ENABLED=true`. O commit aprovado é enviado para uma nova pasta no servidor, o link `current` é trocado e o serviço é reiniciado.
+2. `.github/workflows/deploy.yml` roda somente após um CI aprovado originado por `push` na `main` do próprio repositório e quando a variável **de repositório** `PRODUCTION_DEPLOY_ENABLED=true`. Envia um `git archive` do commit testado, contendo apenas os caminhos necessários. `deploy/release.sh` instala em diretório novo, troca `current` atomicamente e espera o serviço responder; falhas após ativação restauram a versão anterior. Uma falha continua deixando a pipeline vermelha, mesmo quando a recuperação funciona.
 
 O CI de DEV/HMG não referencia environments ou segredos de produção e não possui nenhuma etapa de publicação. O fluxo esperado é `feature/*` → `dev` → `hmg` → `main`; correções urgentes usam `hotfix/*` a partir da `main` e depois retornam para `hmg` e `dev`.
 
@@ -235,15 +241,17 @@ Crie um *environment* chamado `production` no GitHub e cadastre:
 | Tipo | Nome | Conteúdo |
 |---|---|---|
 | Secret | `SERVER_HOST` | IP público ou domínio, sem `https://` |
-| Secret | `SERVER_USER` | usuário administrativo criado pela nuvem |
+| Secret | `SERVER_USER` | `deployer`, usuário dedicado criado pelo provisionamento |
 | Secret | `SERVER_SSH_KEY` | chave privada dedicada ao deploy |
 | Secret | `SERVER_KNOWN_HOSTS` | linha verificada da chave pública do servidor SSH |
 | Variable | `SERVER_PORT` | `22` (opcional; 22 é o padrão) |
-| Variable | `PRODUCTION_DEPLOY_ENABLED` | `true` somente após validar a VM; ausente ou `false` desativa o deploy |
+| Variable de repositório | `PRODUCTION_DEPLOY_ENABLED` | `true` após validar a VM; ausente ou `false` desativa o deploy |
 
 Obtenha a chave de host por um canal confiável, como o console do provedor. Não aceite cegamente a saída de `ssh-keyscan`: compare a impressão digital apresentada com `/etc/ssh/ssh_host_ed25519_key.pub` na VM.
 
-O script de provisionamento concede ao usuário de deploy apenas duas operações sem senha: reiniciar o serviço da aplicação e conferir se ele ficou ativo. Ele não concede `sudo` irrestrito.
+O script usa o administrador da nuvem somente no provisionamento. O `deployer` recebe apenas reinício e consulta do serviço via sudo; a chave usa a opção SSH `restrict`. Não reutilize a chave pessoal nem a chave do trabalho. A restrição precisa ser confirmada com `sudo -l -U deployer` na VM.
+
+Versões anteriores ficam conservadas para recuperação. Para restauração manual, pause publicações, identifique um diretório em `/opt/projeto-aplicado/releases`, crie um link temporário e substitua `current` com `mv -Tf`; reinicie o serviço e verifique `/healthz`. Antes de remover versões antigas, confira `readlink -f /opt/projeto-aplicado/current`; nunca apague a atual nem a última versão saudável. O roteiro OCI contém os comandos.
 
 ## Operação e diagnóstico
 
@@ -282,10 +290,12 @@ Salve capturas sem expor chaves, hashes completos ou outros segredos:
 - configuração SSH com `PasswordAuthentication no`;
 - timer de renovação ativo e `certbot renew --dry-run` aprovado;
 - resultado do SSL Certificate Checker exigido para IP ou nota A no SSL Labs para domínio;
-- resultado do DigiCert TLS Quantum Readiness exibindo suporte a PQC;
+- para acesso por IP, resultado do DigiCert TLS Quantum Readiness exibindo suporte a PQC; para domínio, indicação PQC no SSL Labs;
 - testes locais aprovados.
 
 ## Correspondência com o escopo
+
+A tabela abaixo mapeia arquivos, não comprova produção. A situação de cada critério e sua forma de validação estão na [matriz de conformidade](docs/REVISAO-TECNICA.md).
 
 | Exigência | Implementação |
 |---|---|
@@ -293,7 +303,7 @@ Salve capturas sem expor chaves, hashes completos ou outros segredos:
 | Três vulnerabilidades OWASP | A01, A02, A05 e A07 documentadas acima |
 | Nginx/Apache | Nginx em `deploy/nginx/` |
 | Ubuntu/Debian | provisionamento por APT |
-| SSH por chave | validação e `deploy/ssh/99-projeto-aplicado.conf` |
+| SSH por chave | validação e `deploy/ssh/00-projeto-aplicado.conf` |
 | Fail2Ban 4 erros/24 h | `deploy/fail2ban/sshd.local` |
 | Somente portas necessárias por rede | UFW e Security Group documentados |
 | HTTPS e redirecionamento | Certbot + Nginx |
@@ -303,6 +313,6 @@ Salve capturas sem expor chaves, hashes completos ou outros segredos:
 | GitHub Actions | CI e deploy em `.github/workflows/` |
 | README técnico | este documento |
 
-## Limites de responsabilidade
+## Situação da entrega e limites de validação
 
-O código não cria a conta de nuvem ou do GitHub, não escolhe cobrança e não envia credenciais a terceiros. Essas etapas exigem a conta pessoal do aluno e devem ser realizadas no console oficial do provedor. Os testes externos de TLS dependem de a VM estar pública e funcionando.
+A conta OCI foi acessada por sessão temporária e a infraestrutura anterior foi removida com autorização. O repositório público existe, mas esta revisão local ainda não constitui execução nova de Actions, deploy na `main`, certificação TLS ou validação de PQC. Recursos pagos dependem de autorização explícita; capacidade e ausência de cobrança não são presumidas. O relatório atualizado separa testes locais, revisão de configuração e evidências de nuvem.

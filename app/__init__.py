@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import timedelta
 
 from flask import Flask, render_template, request
@@ -9,6 +10,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .auth import auth_blueprint
 from .security import configure_security
+from .sessions import SessionTickets
 
 
 def create_app(test_config: dict | None = None) -> Flask:
@@ -20,6 +22,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=os.getenv("APP_ENV", "production") != "development",
+        SESSION_REFRESH_EACH_REQUEST=False,
+        SESSION_STORE_DIR=os.getenv("SESSION_STORE_DIR", os.path.join(app.instance_path, "sessions")),
         PERMANENT_SESSION_LIFETIME=timedelta(
             minutes=int(os.getenv("SESSION_MINUTES", "30"))
         ),
@@ -30,6 +34,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         app.config.update(test_config)
 
     _validate_configuration(app)
+    app.extensions["session_tickets"] = SessionTickets(app.config["SESSION_STORE_DIR"])
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     configure_security(app)
     app.register_blueprint(auth_blueprint)
@@ -56,6 +61,10 @@ def _validate_configuration(app: Flask) -> None:
 
     if len(str(app.config["SECRET_KEY"])) < 32:
         raise RuntimeError("SECRET_KEY deve possuir pelo menos 32 caracteres.")
+    if not re.fullmatch(r"scrypt:(32768|65536|131072):8:1\$[A-Za-z0-9]+\$[a-f0-9]{128}", str(app.config["APP_PASSWORD_HASH"])):
+        raise RuntimeError("APP_PASSWORD_HASH deve ser gerado por tools/generate_password_hash.py (scrypt).")
+    if not 60 <= app.config["PERMANENT_SESSION_LIFETIME"].total_seconds() <= 86400:
+        raise RuntimeError("SESSION_MINUTES deve estar entre 1 e 1440.")
 
 
 def _register_error_handlers(app: Flask) -> None:

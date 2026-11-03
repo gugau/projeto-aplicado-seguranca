@@ -8,6 +8,11 @@
 *.pfx
 id_rsa*
 id_ed25519*
+.oci/
+.aws/
+*.sqlite
+*.sqlite3
+*.db
 
 # Python
 __pycache__/

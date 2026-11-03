@@ -9,6 +9,9 @@ User=webapp
 Group=www-data
 WorkingDirectory=/opt/projeto-aplicado/current
 EnvironmentFile=/etc/projeto-aplicado.env
+Environment=SESSION_STORE_DIR=/run/projeto-aplicado/sessions
+RuntimeDirectory=projeto-aplicado
+RuntimeDirectoryMode=0700
 ExecStart=/opt/projeto-aplicado/current/.venv/bin/gunicorn \
   --workers 2 \
   --bind 127.0.0.1:8000 \

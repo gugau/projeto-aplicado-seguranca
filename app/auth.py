@@ -62,6 +62,9 @@ def login():
                 session.permanent = True
                 session["authenticated"] = True
                 session["username"] = current_app.config["APP_USERNAME"]
+                session["sid"] = current_app.extensions["session_tickets"].create(
+                    current_app.permanent_session_lifetime.total_seconds()
+                )
                 rotate_csrf_token()
                 current_app.logger.info(
                     "auth_success ip=%s user=%s",
@@ -92,6 +95,7 @@ def dashboard():
 def logout():
     validate_csrf()
     username = session.get("username", "unknown")
+    current_app.extensions["session_tickets"].revoke(session.get("sid"))
     session.clear()
     current_app.logger.info("logout_success user=%s", username)
     return redirect(url_for("auth.login"))

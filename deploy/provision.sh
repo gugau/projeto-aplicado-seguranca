@@ -6,14 +6,17 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-if [[ "$#" -ne 2 ]]; then
-  echo "Uso: sudo bash deploy/provision.sh <IP-publico-ou-dominio> <email>" >&2
+if [[ "$#" -ne 4 ]]; then
+  echo "Uso: sudo bash deploy/provision.sh <IP-publico-ou-dominio> <email> <chave-publica-deploy> <CIDR-SSH>" >&2
   exit 1
 fi
 
 public_address="$1"
 email="$2"
-deploy_user="${SUDO_USER:-}"
+admin_user="${SUDO_USER:-}"
+deploy_user="deployer"
+deploy_public_key="$3"
+ssh_cidr="$4"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 
@@ -27,31 +30,52 @@ if [[ ! "$email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
   exit 1
 fi
 
-if [[ -z "$deploy_user" || "$deploy_user" == "root" ]]; then
+if [[ -z "$admin_user" || "$admin_user" == "root" ]]; then
   echo "Execute o script com sudo a partir do usuário administrativo que fará o deploy." >&2
   exit 1
 fi
 
-if ! id "$deploy_user" >/dev/null 2>&1; then
-  echo "Usuário de deploy inexistente: $deploy_user" >&2
+if ! id "$admin_user" >/dev/null 2>&1; then
+  echo "Usuário administrativo inexistente: $admin_user" >&2
   exit 1
 fi
 
-authorized_keys="/home/$deploy_user/.ssh/authorized_keys"
+authorized_keys="/home/$admin_user/.ssh/authorized_keys"
 if [[ ! -s "$authorized_keys" ]]; then
   echo "Nenhuma chave SSH autorizada encontrada em $authorized_keys. O endurecimento foi interrompido para evitar bloqueio de acesso." >&2
   exit 1
 fi
 
+[[ -f "$deploy_public_key" ]] && grep -Eq '^ssh-ed25519 [A-Za-z0-9+/]+={0,3}( |$)' "$deploy_public_key" || {
+  echo 'Informe uma chave pública Ed25519 dedicada ao deploy.' >&2; exit 1;
+}
+python3 -c 'import ipaddress,sys; ipaddress.ip_network(sys.argv[1], strict=True)' "$ssh_cidr"
+
+# Confere o endereço antes de instalar pacotes ou alterar serviços.
+python3 -c 'import ipaddress,sys; value=sys.argv[1]; ipaddress.IPv4Address(value) if value.replace(".", "").isdigit() else None' "$public_address"
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
-  nginx python3 python3-venv python3-pip rsync fail2ban ufw openssl ca-certificates curl
+  nginx python3 python3-venv python3-pip python3-systemd rsync fail2ban ufw openssl ca-certificates curl
 
-if ! openssl list -tls1_3 -tls-groups 2>/dev/null | grep -q 'X25519MLKEM768'; then
+if ! openssl list -tls1_3 -tls-groups 2>/dev/null | grep 'X25519MLKEM768' >/dev/null; then
   echo "O OpenSSL disponível não oferece X25519MLKEM768. Use a versão estável mais recente do Ubuntu/Debian com OpenSSL 3.5+ antes de prosseguir." >&2
   exit 1
 fi
+
+if ! id "$deploy_user" >/dev/null 2>&1; then
+  useradd --create-home --shell /bin/bash --groups www-data "$deploy_user"
+fi
+# Impede reaproveitar sem revisão uma conta que já tenha sudo geral.
+if id -nG "$deploy_user" | grep -Eq '(^| )(sudo|admin|wheel)( |$)'; then
+  echo 'A conta deployer tem privilégios administrativos. Remova-os antes de continuar.' >&2
+  exit 1
+fi
+install -d -o "$deploy_user" -g "$deploy_user" -m 0700 "/home/$deploy_user/.ssh"
+{ printf 'restrict '; cat -- "$deploy_public_key"; } > "/home/$deploy_user/.ssh/authorized_keys"
+chown "$deploy_user:$deploy_user" "/home/$deploy_user/.ssh/authorized_keys"
+chmod 0600 "/home/$deploy_user/.ssh/authorized_keys"
 
 if ! id webapp >/dev/null 2>&1; then
   useradd --system --no-create-home --shell /usr/sbin/nologin --gid www-data webapp
@@ -60,9 +84,11 @@ usermod -a -G www-data "$deploy_user"
 
 install -d -o "$deploy_user" -g www-data -m 0750 /opt/projeto-aplicado
 install -d -o "$deploy_user" -g www-data -m 0750 /opt/projeto-aplicado/releases
+install -d -o "$deploy_user" -g www-data -m 0750 /opt/projeto-aplicado/incoming
 install -d -o "$deploy_user" -g www-data -m 0750 /opt/projeto-aplicado/releases/bootstrap
 rsync -a --delete \
   --exclude '.git' --exclude '.github' --exclude '.env*' \
+  --exclude '.cache' --exclude '.venv' --exclude 'instance' --exclude '*.pem' --exclude '*.key' \
   "$repo_root/" /opt/projeto-aplicado/releases/bootstrap/
 chown -R "$deploy_user":www-data /opt/projeto-aplicado/releases/bootstrap
 chmod -R o-rwx /opt/projeto-aplicado/releases/bootstrap
@@ -114,7 +140,7 @@ ln -sfn /opt/certbot/bin/certbot /usr/local/bin/certbot
 if [[ "$public_address" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
   certbot certonly \
     --non-interactive --agree-tos --no-eff-email --email "$email" \
-    --preferred-profile shortlived \
+    --required-profile shortlived \
     --webroot --webroot-path /var/www/certbot \
     --ip-address "$public_address" \
     --key-type ecdsa
@@ -133,8 +159,13 @@ install -o root -g root -m 0644 "$repo_root/deploy/certbot/certbot-renew.service
 install -o root -g root -m 0644 "$repo_root/deploy/certbot/certbot-renew.timer" /etc/systemd/system/certbot-renew.timer
 
 install -o root -g root -m 0644 "$repo_root/deploy/fail2ban/sshd.local" /etc/fail2ban/jail.d/sshd.local
-install -o root -g root -m 0644 "$repo_root/deploy/ssh/99-projeto-aplicado.conf" /etc/ssh/sshd_config.d/99-projeto-aplicado.conf
+# O OpenSSH usa o primeiro valor encontrado: este arquivo precede 50-cloud-init.conf.
+install -o root -g root -m 0644 "$repo_root/deploy/ssh/00-projeto-aplicado.conf" /etc/ssh/sshd_config.d/00-projeto-aplicado.conf
 sshd -t
+effective_ssh="$(sshd -T)"
+grep -qx 'passwordauthentication no' <<< "$effective_ssh"
+grep -qx 'kbdinteractiveauthentication no' <<< "$effective_ssh"
+grep -qx 'permitrootlogin no' <<< "$effective_ssh"
 
 sudoers_file="/etc/sudoers.d/projeto-aplicado-deploy"
 {
@@ -146,7 +177,7 @@ visudo -cf "$sudoers_file"
 
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow 22/tcp comment 'SSH protegido por Fail2Ban'
+ufw allow from "$ssh_cidr" to any port 22 proto tcp comment 'SSH por chave com Fail2Ban'
 ufw allow 80/tcp comment 'HTTP para redirect e ACME'
 ufw allow 443/tcp comment 'HTTPS da aplicacao'
 ufw --force enable
