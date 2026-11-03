@@ -6,7 +6,7 @@ from app.security import login_limiter
 
 
 @pytest.fixture()
-def app():
+def app(tmp_path):
     application = create_app(
         {
             "TESTING": True,
@@ -14,6 +14,7 @@ def app():
             "APP_USERNAME": "admin",
             "APP_PASSWORD_HASH": generate_password_hash("Senha-Segura-123!"),
             "SESSION_COOKIE_SECURE": False,
+            "SESSION_STORE_DIR": str(tmp_path / "sessions"),
         }
     )
     login_limiter._attempts.clear()
