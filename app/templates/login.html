@@ -16,7 +16,7 @@
     <div class="card login-card">
       <div class="card-heading">
         <span class="status-dot" aria-hidden="true"></span>
-        <span>Conexão segura</span>
+        <span>{{ 'Conexão HTTPS' if request.is_secure else 'Ambiente local HTTP' }}</span>
       </div>
       <h2 id="login-title">Acesse sua conta</h2>
       <p class="muted">Use as credenciais fornecidas pelo administrador.</p>

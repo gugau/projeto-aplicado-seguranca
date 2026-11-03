@@ -8,7 +8,7 @@ from collections import defaultdict, deque
 from functools import wraps
 from threading import Lock
 
-from flask import Flask, abort, g, redirect, request, session, url_for
+from flask import Flask, abort, current_app, g, redirect, request, session, url_for
 
 
 class LoginRateLimiter:
@@ -51,6 +51,8 @@ def configure_security(app: Flask) -> None:
     @app.before_request
     def attach_request_context() -> None:
         g.request_id = uuid.uuid4().hex
+        if session.get("authenticated") and not current_app.extensions["session_tickets"].valid(session.get("sid")):
+            session.clear()
         if "csrf_token" not in session:
             session["csrf_token"] = secrets.token_urlsafe(32)
 
@@ -83,7 +85,7 @@ def csrf_token() -> str:
 def validate_csrf() -> None:
     expected = session.get("csrf_token", "")
     received = request.form.get("csrf_token", "")
-    if not expected or not received or not hmac.compare_digest(expected, received):
+    if not expected or not received or not received.isascii() or not hmac.compare_digest(expected, received):
         abort(400)
 
 
