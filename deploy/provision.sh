@@ -119,7 +119,7 @@ rsync -a --delete \
   --exclude '.cache' --exclude '.venv' --exclude 'instance' --exclude '*.pem' --exclude '*.key' \
   "$repo_root/" /opt/projeto-aplicado/releases/bootstrap/
 chown -R "$deploy_user":www-data /opt/projeto-aplicado/releases/bootstrap
-chmod -R o-rwx /opt/projeto-aplicado/releases/bootstrap
+chmod -R g+rX,g-w,o-rwx /opt/projeto-aplicado/releases/bootstrap
 
 python3 -m venv /opt/projeto-aplicado/releases/bootstrap/.venv
 /opt/projeto-aplicado/releases/bootstrap/.venv/bin/python -m pip install \

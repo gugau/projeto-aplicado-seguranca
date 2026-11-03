@@ -42,21 +42,21 @@ Legenda: **VL** = validado localmente; **VP** = validado na VM/externamente; **A
 | TLS confiável por IP | VP | SSL.org Yes/Good signature/Good key; cliente externo verifica cadeia/IP | Guardar captura real; diferença de rótulo registrada | Evidências da entrega |
 | PQC por IP | VP | Handshakes interno/externo negociam X25519MLKEM768; DigiCert PASS informado pelo aluno | Guardar captura real do teste do aluno | OpenSSL e DigiCert |
 | TLS/PQC por domínio, se escolhido | Não se aplica ao plano por IP | Nginx suporta domínio, mas não foi escolhido domínio | Só aplicar se trocar o endereço de entrega | SSL Labs A com indicação de PQC; não substituir por teste de IP |
-| GitHub público | Validado pela API pública em 03/11/2026 | Repositório `gugau/projeto-aplicado-seguranca`: `private=false`, branch padrão `dev` | Publicar esta revisão após validação | Página pública e commit correspondente |
+| GitHub público | Validado pela API e publicação | Repositório `gugau/projeto-aplicado-seguranca`: `private=false`, branch padrão `dev`; revisão publicada por PR | Manter público sem credenciais | Página pública e commits correspondentes |
 | Proteção de branches (prática adicional solicitada) | Validada | Proteção aplicada em dev/hmg/main e PRs #6/#7/#8 promovidos com CI | Manter controles | API e histórico de PRs |
-| Conta pessoal separada | Implementado; configuração histórica | Alias SSH pessoal e identidade local definidos nesta tarefa | Conferir identidade antes de push; sem alterar Git global | `git config --local user.name`, remote e autenticação pessoal |
-| Prevenção de credenciais | VL, heurística | `.gitignore`, `tools/check_secrets.py --history` | Repetir no CI; revisar também alterações novas | Verificação atual e de blobs históricos, sem imprimir valores |
+| Conta pessoal separada | Validada nos pushes e API | Alias SSH pessoal, identidade Git local e CLI isolada autenticada como gugau | Preservar separação da conta profissional | Configuração local, remote e autenticação pessoal |
+| Prevenção de credenciais | VL e CI real; heurística | `.gitignore`, scanner de arquivos/histórico e Secrets fora do Git | Manter scanner e revisão de alterações | Verificação atual e de blobs históricos, sem imprimir valores |
 | Login e página protegida | VL/VP | Testes locais e 11 verificações externas | Manter regressões | Sem cookie: 302; credenciais corretas: dashboard 200 |
 | Logout e cookie reapresentado | VL/VP; falha inicial corrigida | Tickets revogáveis; cookie real capturado e rejeitado após logout | Manter regressão | Reutilização após logout recebe 302 |
-| Expiração e rotação | VL | Expiração absoluta no ticket; `SESSION_REFRESH_EACH_REQUEST=False` | Confirmar tempo configurado em produção | Testes de relógio e uso contínuo; ausência de renovação automática |
+| Expiração e rotação | VL; configuração VP | Expiração absoluta no ticket; `SESSION_REFRESH_EACH_REQUEST=False`; VM configurada com 30 min | Manter regressões; não foi necessário aguardar 30 min na VM | Testes de relógio/rotação e consulta restrita da duração configurada |
 | Cookies, CSRF, entradas e erros | VL; cookies/cabeçalhos VP | Testes e cliente HTTPS real | Manter regressões | Cookies Secure/HttpOnly/Strict; CSRF inválido/Unicode rejeitado localmente |
 | ≥3 categorias OWASP 2025 | VL/VP para controles examinados | A01, A02, A05 e A07, mapeadas no README; borda e acesso externos verificados | Não confundir mitigação com garantia total contra uma categoria | Regressões de acesso, configuração, escape e autenticação |
 | IA no desenvolvimento/auditoria | Evidência nesta tarefa e arquivos | Histórico desta tarefa; README | Aluno demonstrar ferramentas e justificar decisões | Demonstração da revisão e das reproduções/correções |
-| GitHub Actions após push main | P | CI main aprovado; Secrets production cadastrados com autorização; gate ainda desabilitado | Habilitar variável e concluir nova promoção main | Run real verde com SHA correspondente e aplicação atualizada |
+| GitHub Actions após push main | VP | CI e deploy 41647928276/41648006741 aprovados; SHA 3832321 conferido no current da VM | Manter gate e Secrets protegidos | Run real verde, SHA exato, serviço e HTTPS saudáveis |
 | DEV/HMG sem publicação | Validado no GitHub | CI das promoções #6/#7; condição do deploy exige push main | Preservar condição nas novas promoções | Runs em dev/hmg só build/testes; nenhum acesso aos Secrets de produção |
 | Identidade SSH, usuário mínimo | VP | Fingerprint validada pelo console OCI; nova conexão deployer e sudo -l com duas operações | Proteger chave dedicada e Secrets | Teste real de acesso/privilégios |
-| Recuperação do deploy | VL com serviços simulados; AV para OCI | `deploy/release.sh`, `tests/test_release.py` | Executar novo CI e ensaio real com falha controlada | Link anterior restaurado e pipeline continua vermelha |
-| README e evidências finais | P | README revisto; este relatório e roteiro OCI | Acrescentar resultados de nuvem realmente coletados | Checklist de demonstração abaixo |
+| Recuperação do deploy | VL/VP | Falha real recuperada e ensaio controlado posterior: status 1, mesmo alvo anterior e saúde restabelecida | Manter versão anterior e monitorar disco; há interrupção durante restart/falha | Evidências, logs do workflow e teste controlado |
+| README e evidências finais | Concluídos para os critérios técnicos | README, matriz, roteiro OCI e EVIDENCIAS-ENTREGA com resultados reais | Aluno pode anexar capturas à apresentação; acompanhar contabilização OCI | Checklist de demonstração abaixo |
 
 ## Verificações executadas nesta revisão
 
@@ -71,6 +71,8 @@ Legenda: **VL** = validado localmente; **VP** = validado na VM/externamente; **A
 - Auditoria atual: o conjunto instalado apresentou alertas para Werkzeug 3.1.8 (PYSEC-2026-4312) e pytest 8.4.2 (PYSEC-2026-1845; repetido na resposta da ferramenta). Foram fixados Werkzeug 3.1.9 e pytest 9.0.3. A reauditoria dos pacotes diretos e transitivos enumerados do ambiente Windows retornou **nenhuma vulnerabilidade conhecida**; a resolução automática inicial foi interrompida por execução prolongada e substituída por enumeração explícita, sem omitir as dependências instaladas de aplicação/testes. O novo CI também audita `requirements-dev.txt` com resolução de dependências. Referências dos mantenedores: [Werkzeug](https://werkzeug.palletsprojects.com/en/stable/changes/), [pytest](https://docs.pytest.org/en/9.0.x/changelog.html).
 - `pip check`: sem conflitos nos ambientes Windows e Linux após as atualizações.
 - OCI: o levantamento inicial encontrou ausência de máquinas ativas; depois foi criada a VM mínima. Ubuntu 26.04 foi substituído por 26.10 quando o upgrade oficial não ofereceu a versão. Imagens/buckets temporários foram removidos após confirmar boot e acesso SSH.
+- Produção: 11 verificações HTTPS externas passaram após deploy e ensaio de recuperação; verificador local aprovou serviços, SSH, Fail2Ban, UFW, renovação, cabeçalhos e handshake TLS híbrido.
+- Primeiro deploy: falhou por modo 0700 da pasta criada por mktemp e recuperou bootstrap automaticamente. A correção de permissão recebeu regressão Linux e foi promovida por PR antes do deploy aprovado. Um segundo ensaio controlado confirmou restauração da versão saudável, com retorno não zero.
 
 ## Diferenças e referências atuais
 
@@ -96,4 +98,4 @@ O limitador de login é por processo; a borda Nginx mantém limite por IP compar
 8. Mostrar PR/promoção, CI, push main, deploy automático e versão servida.
 9. Ensaiar recuperação usando uma alteração controlada e depois restaurar a versão saudável.
 
-Não anexar cookies, chaves, tokens, senhas, arquivos de sessão ou conteúdo de `/etc/projeto-aplicado.env`. A conclusão acadêmica permanece pendente enquanto os itens de produção não tiverem evidência.
+Não anexar cookies, chaves, tokens, senhas, arquivos de sessão ou conteúdo de `/etc/projeto-aplicado.env`. Os critérios técnicos obrigatórios têm evidências registradas. Permanecem como atividades do aluno a apresentação e eventuais capturas solicitadas pelo professor; a contabilização final do armazenamento temporário depende da Oracle. Esses limites não são apresentados como testes já executados ou custo total zero.
