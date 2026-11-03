@@ -56,7 +56,9 @@ tar -xzf "$archive" -C "$release_dir" --no-same-owner
 python3 -m venv "$release_dir/.venv"
 "$release_dir/.venv/bin/python" -m pip install --disable-pip-version-check --requirement "$release_dir/requirements.txt"
 chgrp -R "${APP_GROUP:-www-data}" "$release_dir"
-chmod -R o-rwx "$release_dir"
+# mktemp cria o diretório com 0700; o serviço webapp precisa atravessá-lo.
+# Dar leitura/execução ao grupo sem permitir escrita ou acesso a terceiros.
+chmod -R g+rX,o-rwx "$release_dir"
 # Marcado antes da troca: qualquer falha na ativação também aciona recuperação.
 activated=true
 activate "$release_dir"
