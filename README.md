@@ -2,7 +2,7 @@
 
 Protótipo web com autenticação real no servidor, área interna protegida e logout. A entrega foi estruturada para demonstrar **Secure by Design**, **Secure by Default**, três ou mais categorias do **OWASP Top 10:2025**, infraestrutura Linux endurecida e implantação contínua pelo GitHub Actions.
 
-> **Estado em 03/11/2026:** aplicação disponível em **https://163.176.111.141**, na OCI com Ubuntu 26.10. Login/logout, HTTPS confiável, renovação de ensaio e PQC foram validados; SSL.org positivo e DigiCert PASS informado pelo aluno. Testes locais e CI aprovados. A execução final do deploy automático ainda está em validação. Consulte as [evidências reais](docs/EVIDENCIAS-ENTREGA.md), a [matriz de conformidade](docs/REVISAO-TECNICA.md) e o [roteiro OCI](deploy/oci/README.md).
+> **Estado em 03/11/2026:** aplicação disponível em **https://163.176.111.141**, na OCI com Ubuntu 26.10. Critérios técnicos validados: login/logout, HTTPS confiável, renovação de ensaio, PQC e deploy automático do commit aprovado. SSL.org positivo e DigiCert PASS informado pelo aluno. CI com 21 testes aprovado e recuperação real comprovada. Consulte as [evidências reais](docs/EVIDENCIAS-ENTREGA.md), a [matriz de conformidade](docs/REVISAO-TECNICA.md) e o [roteiro OCI](deploy/oci/README.md).
 
 ## Visão geral
 
@@ -165,7 +165,7 @@ Regras a conferir na NSG/Security List e no UFW:
 
 Não autorize portas como 5000 ou 8000. O Gunicorn não deve ficar acessível pela internet.
 
-**Compatibilidade com Actions:** restringir 22 apenas ao IP do aluno bloqueia os runners hospedados. Seus IPs são dinâmicos ([GitHub](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-githubs-ip-addresses)). O roteiro explicita a decisão de origem; não há abertura automática de firewall pela pipeline nem runner auto-hospedado. Não declare a integração validada antes de testar um runner real.
+**Compatibilidade com Actions:** restringir 22 apenas ao IP do aluno bloqueia os runners hospedados. Seus IPs são dinâmicos ([GitHub](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-githubs-ip-addresses)). O aluno autorizou explicitamente SSH público nesta VM com chave, senha/root desativados e Fail2Ban. A conexão de um runner real e o deploy foram aprovados. O roteiro explicita a decisão de origem; a pipeline não altera o firewall.
 
 Antes do provisionamento:
 
@@ -236,9 +236,11 @@ O fluxo possui duas etapas:
 
 O CI de DEV/HMG não referencia environments ou segredos de produção e não possui nenhuma etapa de publicação. O fluxo esperado é `feature/*` → `dev` → `hmg` → `main`; correções urgentes usam `hotfix/*` a partir da `main` e depois retornam para `hmg` e `dev`.
 
-As branches `dev`, `hmg` e `main` devem ser protegidas contra push direto e *force push*. As promoções devem exigir Pull Request, resolução das conversas e aprovação do status check **Build e testes**. Depois de uma publicação, a alteração da `main` deve ser sincronizada de volta para `hmg` e `dev`.
+As branches `dev`, `hmg` e `main` estão protegidas contra push direto e *force push*, inclusive para o administrador. As promoções exigem Pull Request, resolução das conversas e aprovação do status check **Build e testes** sobre a base atual. Como há um mantenedor, não foi exigida aprovação por um segundo revisor.
 
-Crie um *environment* chamado `production` no GitHub e cadastre:
+Quando os históricos divergem, criar uma branch de promoção a partir da origem e incorporar a base de destino antes de abrir o PR. Isso permite promover `dev` → `hmg` → `main` com checks estritos sem push direto nas branches permanentes. Correções a partir da `main` retornam pelo mesmo fluxo; o histórico pode conter commits de merge diferentes mesmo com conteúdo idêntico.
+
+O *environment* `production` foi configurado e os quatro Secrets foram cadastrados com autorização. Para reproduzir a configuração, use:
 
 | Tipo | Nome | Conteúdo |
 |---|---|---|
@@ -317,4 +319,4 @@ A tabela abaixo mapeia arquivos, não comprova produção. A situação de cada 
 
 ## Situação da entrega e limites de validação
 
-A conta OCI foi acessada por sessão temporária e a infraestrutura anterior foi removida com autorização. A nova aplicação foi validada externamente, inclusive revogação de sessão e negociação híbrida `X25519MLKEM768`. As branches estão protegidas e as promoções usam PR e CI. A execução final do deploy automático será registrada nas evidências. O armazenamento temporário da imagem foi autorizado até US$ 0,10 e removido; a contabilização final depende da Oracle.
+A conta OCI foi acessada por sessão temporária e a infraestrutura anterior foi removida com autorização. A nova aplicação foi validada externamente, inclusive revogação de sessão e negociação híbrida `X25519MLKEM768`. As branches estão protegidas e as promoções usam PR e CI; somente `main` publica. O deploy automático concluiu com SHA conferido na VM e o ensaio de falha restaurou a versão saudável. A matriz registra a situação de cada critério. O armazenamento temporário da imagem foi autorizado até US$ 0,10 e removido; a contabilização final depende da Oracle. O aluno pode acrescentar capturas à apresentação usando o roteiro de evidências.
