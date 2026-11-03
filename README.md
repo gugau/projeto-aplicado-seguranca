@@ -2,7 +2,7 @@
 
 Protótipo web com autenticação real no servidor, área interna protegida e logout. A entrega foi estruturada para demonstrar **Secure by Design**, **Secure by Default**, três ou mais categorias do **OWASP Top 10:2025**, infraestrutura Linux endurecida e implantação contínua pelo GitHub Actions.
 
-> **Estado em 03/11/2026:** revisão e correções locais realizadas; a infraestrutura anterior na OCI foi removida e não há VM de produção. Os arquivos de Nginx, SSH, firewall, TLS e CI/CD são implementações ainda pendentes de validação no servidor. A entrega acadêmica não está concluída. Consulte a [matriz de conformidade e evidências](docs/REVISAO-TECNICA.md) e o [roteiro OCI](deploy/oci/README.md).
+> **Estado em 03/11/2026:** aplicação disponível em **https://163.176.111.141**, na OCI com Ubuntu 26.10. Login/logout, HTTPS confiável, renovação de ensaio e PQC foram validados; SSL.org positivo e DigiCert PASS informado pelo aluno. Testes locais e CI aprovados. A execução final do deploy automático ainda está em validação. Consulte as [evidências reais](docs/EVIDENCIAS-ENTREGA.md), a [matriz de conformidade](docs/REVISAO-TECNICA.md) e o [roteiro OCI](deploy/oci/README.md).
 
 ## Visão geral
 
@@ -17,7 +17,7 @@ flowchart LR
 
 | Camada | Tecnologia | Responsabilidade |
 |---|---|---|
-| Aplicação | Python 3.12 + Flask | Login, sessão, autorização, CSRF e páginas |
+| Aplicação | Python 3.12+ + Flask (3.14 na VM) | Login, sessão, autorização, CSRF e páginas |
 | Processo | Gunicorn + systemd | Execução isolada e reinício automático |
 | Borda | Nginx | HTTPS, redirecionamento, proxy e limitação de requisições |
 | Servidor | Ubuntu/Debian | SSH, UFW, Fail2Ban e operação |
@@ -153,7 +153,7 @@ A relação abaixo usa os nomes da [lista oficial OWASP Top 10:2025](https://owa
 
 ## Preparação da nuvem
 
-O provedor escolhido é a **Oracle Cloud Infrastructure**, com uma única VM de produção e sem load balancer. DEV e HMG são branches com build/testes, sem VMs. A consulta real de 03/11/2026 encontrou imagens Ubuntu ARM até 26.04 no catálogo; a versão estável Ubuntu mais recente é 26.10. Não consideramos uma imagem antiga conforme apenas por ser LTS. A seleção/atualização do sistema e a elegibilidade Free Tier são etapas pendentes detalhadas no [roteiro OCI](deploy/oci/README.md).
+O provedor escolhido é a **Oracle Cloud Infrastructure**, com uma única VM A1 de produção (1 OCPU, 6 GB de RAM e disco de 50 GB), sem load balancer. DEV e HMG são branches com build/testes, sem VMs. O catálogo ARM ofereceu Ubuntu até 26.04 e o atualizador oficial não ofereceu 26.10. A VM vazia inicial foi substituída por uma imagem oficial Canonical Ubuntu 26.10, com SHA-256 conferido e boot UEFI/paravirtualizado. O sistema foi confirmado por SSH com chave de host comparada ao console OCI. A importação usou armazenamento temporário com orçamento autorizado de até US$ 0,10; imagem e bucket foram excluídos após o boot. Não se afirma custo total zero. Detalhes no [roteiro OCI](deploy/oci/README.md).
 
 Regras a conferir na NSG/Security List e no UFW:
 
@@ -195,11 +195,13 @@ O script:
 - instala o arquivo SSH `00-projeto-aplicado.conf` antes do cloud-init e confere o resultado efetivo com `sshd -T`;
 - executa verificações locais ao final.
 
+Se não quiser cadastrar um e-mail no ACME, o segundo argumento pode ser `-`; nesse caso o registro usa a opção oficial de conta sem e-mail. Nenhuma informação da conta OCI é encaminhada como contato automaticamente.
+
 **Cuidado:** mantenha a sessão SSH atual aberta. Antes de fechá-la, abra uma segunda sessão e confirme que o acesso por chave continua funcionando.
 
 ## HTTPS por IP e renovação
 
-Para IPs, o script fixa Certbot 5.8 em modo `webroot`, `--ip-address` e `--required-profile shortlived`, sem fallback silencioso de perfil ([Certbot](https://eff-certbot.readthedocs.io/en/stable/man/certbot.html)). O timer verifica a renovação duas vezes por dia e o hook valida/recarrega o Nginx. Emissão, prazo real, renovação e compatibilidade com o sistema selecionado ainda precisam ser medidos na VM.
+Para IPs, o script fixa Certbot 5.8 em modo `webroot`, `--ip-address` e `--required-profile shortlived`, sem fallback silencioso de perfil ([Certbot](https://eff-certbot.readthedocs.io/en/stable/man/certbot.html)). O timer verifica a renovação duas vezes por dia e o hook valida/recarrega o Nginx. Na VM, a emissão por IP e a renovação de ensaio foram aprovadas; datas e resultados externos estão nas [evidências](docs/EVIDENCIAS-ENTREGA.md).
 
 O Certbot armazena o certificado em:
 
@@ -315,4 +317,4 @@ A tabela abaixo mapeia arquivos, não comprova produção. A situação de cada 
 
 ## Situação da entrega e limites de validação
 
-A conta OCI foi acessada por sessão temporária e a infraestrutura anterior foi removida com autorização. O repositório público existe, mas esta revisão local ainda não constitui execução nova de Actions, deploy na `main`, certificação TLS ou validação de PQC. Recursos pagos dependem de autorização explícita; capacidade e ausência de cobrança não são presumidas. O relatório atualizado separa testes locais, revisão de configuração e evidências de nuvem.
+A conta OCI foi acessada por sessão temporária e a infraestrutura anterior foi removida com autorização. A nova aplicação foi validada externamente, inclusive revogação de sessão e negociação híbrida `X25519MLKEM768`. As branches estão protegidas e as promoções usam PR e CI. A execução final do deploy automático será registrada nas evidências. O armazenamento temporário da imagem foi autorizado até US$ 0,10 e removido; a contabilização final depende da Oracle.

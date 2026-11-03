@@ -27,7 +27,7 @@ check "Fail2Ban ativo" systemctl is-active --quiet fail2ban.service
 check "renovação automática ativa" systemctl is-active --quiet certbot-renew.timer
 check "configuração do Nginx válida" nginx -t
 check "configuração do SSH válida" sshd -t
-effective_ssh="$(sshd -T)"
+effective_ssh="$(sshd -T | tr '[:upper:]' '[:lower:]')"
 check "autenticação SSH efetiva por senha desativada" grep -qx 'passwordauthentication no' <<< "$effective_ssh"
 check "autenticação interativa efetiva desativada" grep -qx 'kbdinteractiveauthentication no' <<< "$effective_ssh"
 check "login root efetivo desativado" grep -qx 'permitrootlogin no' <<< "$effective_ssh"

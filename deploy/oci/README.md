@@ -6,14 +6,20 @@ Este roteiro complementa o provisionamento existente. Não utiliza banco, contai
 
 Execute `preflight.py` com o Python do ambiente da OCI CLI, passando `--config-file CAMINHO_LOCAL` e `--profile PERFIL`. O script usa sessão temporária e somente consulta. Não imprima o arquivo de configuração ou o token.
 
-Resultado real em 03/11/2026: São Paulo é a home region, não há máquinas ativas e o catálogo Ubuntu para A1 retorna versões até 26.04. [Ubuntu 26.10](https://documentation.ubuntu.com/release-notes/26.10/) já é estável. A imagem 26.04 não deve ser apresentada como a última versão estável.
+Levantamento inicial em 03/11/2026: São Paulo é a home region, não havia máquinas ativas e o catálogo Ubuntu para A1 retornava versões até 26.04. [Ubuntu 26.10](https://documentation.ubuntu.com/release-notes/26.10/) já era estável. Ao final do provisionamento existe uma VM de produção, descrita nas [evidências](../../docs/EVIDENCIAS-ENTREGA.md).
 
-Plano de menor alteração: imagem oficial Ubuntu 26.04 ARM, seguida de atualização suportada para 26.10 antes do provisionamento da aplicação. Essa atualização ainda não foi executada/testada e pode exigir recuperação por console. Uma alternativa é Debian estável atual, mas imagem personalizada e elegibilidade/cobrança precisam ser verificadas antes da importação. Não criar imagem personalizada nem escolher shape pago por falta de capacidade.
+O plano inicial de atualizar a imagem 26.04 foi testado: `upgrade-os.sh` aplicou atualizações e habilitou o canal normal, mas o atualizador oficial retornou **No new release found**. Não foi usado `-d` nem forçada versão de desenvolvimento.
+
+Para cumprir a versão estável atual, foi importada a [imagem oficial Canonical 26.10 ARM](https://cloud-images.ubuntu.com/releases/stonking/release/ubuntu-26.10-server-cloudimg-arm64.img), SHA-256 `357cd136ae187620c984adddb314e3454f7db9e19990bc530fe995716d19ee19`. O arquivo tem 976.734.208 bytes e disco virtual de 4.831.838.208 bytes; apesar disso, a OCI registrou 47.694 MiB para a imagem. A estimativa inicial de enquadramento gratuito pela dimensão do arquivo foi invalidada e a primeira imagem/bucket foram removidos. A repetição só ocorreu após autorização expressa para até **US$ 0,10 de armazenamento temporário**.
+
+A tabela oficial usa o preço de armazenamento Standard para imagens; a [API de preços B91628](https://apexapps.oracle.com/pls/apex/cetools/api/v1/products/?partNumber=B91628&currencyCode=USD) informou US$ 0,0255/GB-mês acima da faixa gratuita. O valor real proporcional ainda depende da contabilização da OCI; não foi declarado custo zero. A imagem e o bucket da segunda importação também foram removidos após confirmar o boot.
+
+A rede da VM inicial foi reutilizada. A VM inicial e seu disco foram encerrados antes de iniciar a substituta. A nova VM foi confirmada como Ubuntu 26.10 estável, kernel 7.3.0-9-generic, OpenSSL 4.0.3. O uso de imagem própria foi necessário para a versão do SO, sem alterar stack ou arquitetura da aplicação.
 
 Conferir no Console OCI:
 
 - Shape A1 e imagem identificados como elegíveis, uso acumulado do mês, limites e recursos existentes.
-- Plano inicial: 1 OCPU, 6 GB de RAM, disco de inicialização de 47 GB, desempenho padrão sem recursos premium.
+- Configuração aplicada: 1 OCPU, 6 GB de RAM e disco de 50 GB; a OCI rejeitou 47 GB por exigir mínimo de 50 GB.
 - Nenhuma reserva paga, IP BYO, backup automático pago, LB, NAT gateway ou assinatura Marketplace.
 - Se houver falta de capacidade ou elegibilidade incerta, interromper a criação e registrar a resposta; não trocar automaticamente para shape pago.
 
@@ -60,7 +66,7 @@ sudo certbot renew --dry-run --run-deploy-hooks
 sudo systemctl list-timers certbot-renew.timer
 ```
 
-Comparar a versão OpenSSL de linha de comando com a biblioteca efetivamente ligada ao Nginx em `nginx -V`. O teste local de handshake exige TLS 1.3 e `X25519MLKEM768` com certificado verificado; sua aprovação ainda precisa ser obtida na VM.
+Comparar a versão OpenSSL de linha de comando com a biblioteca efetivamente ligada ao Nginx em `nginx -V`. O teste exige TLS 1.3 e `X25519MLKEM768` com certificado verificado. Na VM atual e em cliente externo, o handshake foi aprovado; isso não dispensa os verificadores do escopo.
 
 ## 4. Configurar GitHub e executar deploy
 
