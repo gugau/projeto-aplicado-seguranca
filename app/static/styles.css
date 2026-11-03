@@ -208,10 +208,12 @@ button:hover, .button-link:hover { background: var(--brand-dark); transform: tra
   display: flex;
   justify-content: space-between;
   gap: 40px;
-  align-items: end;
+  align-items: center;
 }
 
-.dashboard h1 { font-size: clamp(2.9rem, 7vw, 6.4rem); }
+.dashboard { max-width: 1080px; margin-inline: auto; }
+.dashboard h1 { margin: 14px 0 12px; font-size: clamp(2.5rem, 4.5vw, 4rem); }
+.dashboard-header p { margin: 0; font-size: 1rem; }
 
 .secondary-button {
   color: var(--brand);
@@ -221,25 +223,34 @@ button:hover, .button-link:hover { background: var(--brand-dark); transform: tra
 }
 
 .secondary-button:hover { color: white; }
+.secondary-button { gap: 16px; }
+.secondary-button span { font-size: 1.15rem; }
 
-.security-grid {
+.account-summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-top: 70px;
-}
-
-.security-card {
-  min-height: 230px;
-  padding: 28px;
+  margin-top: 38px;
+  padding: 28px 0;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 32px rgba(20, 35, 29, 0.035);
 }
 
-.card-number { color: var(--brand); font-family: Georgia, serif; font-size: 1.4rem; }
-.security-card h2 { margin: 45px 0 10px; font-size: 1.15rem; }
-.security-card p { margin: 0; color: var(--muted); line-height: 1.6; }
+.account-item { min-width: 0; padding: 0 28px; }
+.account-item + .account-item { border-left: 1px solid var(--line); }
+.summary-label { display: block; color: var(--muted); font-size: 0.82rem; }
+.account-item > strong { display: block; overflow-wrap: anywhere; margin-top: 12px; font-size: 1.85rem; font-weight: 650; letter-spacing: -0.04em; }
+.summary-unit { font-size: 1rem; font-weight: 500; }
+.account-item p { margin: 8px 0 0; font-size: 0.82rem; line-height: 1.5; color: var(--muted); }
+.access-panel { display: flex; align-items: center; gap: 24px; margin-top: 24px; padding: 30px; border: 1px solid #c6d9cc; border-radius: 18px; background: #edf4ed; }
+.access-symbol { flex: 0 0 58px; height: 58px; display: grid; place-items: center; color: var(--brand); border-radius: 50%; background: #dcebdd; }
+.access-symbol svg { width: 30px; height: 30px; }
+.access-panel h2 { margin: 9px 0 10px; font-size: 1.35rem; font-weight: 650; letter-spacing: -0.025em; }
+.access-panel p { max-width: 580px; margin: 0; line-height: 1.65; font-size: 0.94rem; color: var(--muted); }
+.access-badge { flex-shrink: 0; margin-left: auto; border: 1px solid #bfcebf; padding: 7px 12px; border-radius: 999px; color: var(--brand-dark); background: #f8fbf7; font-size: 0.75rem; font-weight: 600; }
+.session-note { margin: 20px 0 0; color: var(--muted); font-size: 0.82rem; line-height: 1.6; }
+button:focus-visible, a:focus-visible { outline: 3px solid var(--brand); outline-offset: 5px; }
 
 .error-card { max-width: 620px; margin: auto; padding: 48px; text-align: center; }
 .error-code { color: var(--brand); font-family: Georgia, serif; font-size: 4rem; }
@@ -251,7 +262,14 @@ button:hover, .button-link:hover { background: var(--brand-dark); transform: tra
   .auth-layout { grid-template-columns: 1fr; }
   .intro-panel h1 { font-size: clamp(2.5rem, 13vw, 4.5rem); }
   .dashboard-header { align-items: start; flex-direction: column; }
-  .security-grid { grid-template-columns: 1fr; margin-top: 45px; }
+  .account-summary { grid-template-columns: 1fr; padding: 0 24px; margin-top: 28px; }
+  .account-item { padding: 22px 0; }
+  .account-item + .account-item { border-left: 0; border-top: 1px solid var(--line); }
+  .access-panel { align-items: start; flex-wrap: wrap; padding: 24px; gap: 18px; }
+  .access-symbol { flex-basis: 46px; height: 46px; }
+  .access-panel > div:nth-child(2) { flex: 1; min-width: 180px; }
+  .access-badge { margin-left: 0; }
+  .dashboard-header form { width: 100%; }
   .secondary-button { width: 100%; }
 }
 
